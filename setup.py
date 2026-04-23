@@ -23,6 +23,10 @@ setup(
         "rasterio",
         "h5py",
         "scipy",
+        "cfgrib",
+        "pyhdf",
+        "netCDF4",
+        "gdal",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

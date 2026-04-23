@@ -4,3 +4,7 @@ xarray>=2022.3.0
 rasterio>=1.2.0
 h5py>=3.6.0
 scipy>=1.7.0
+cfgrib
+pyhdf
+netCDF4
+gdal
