@@ -227,11 +227,12 @@ class GeoClim:
         return df_points, np.array([lats, lons]).T
 
     @staticmethod
-    def interpolate_era5_nc(coord_file, nc_folder, col_lat="Y", col_lon="X", var_name="tp", multiplier=1000):
+    def interpolate_era5_nc(coord_file, nc_folder, col_lat="Y", col_lon="X", var_names="tp", agg_method="sum", multiplier=1):
         """
         Automated pipeline for bilinear interpolation of ERA5 (.nc) data
         directly from raw coordinate files and a folder of .nc files.
-        Allows specifying the target variable (var_name) and an optional multiplier.
+        Allows specifying multiple target variables (var_names as string or list),
+        an aggregation method ('sum' or 'mean'), and an optional multiplier.
         """
         import os
         from glob import glob
@@ -241,12 +242,15 @@ class GeoClim:
         file_pattern = os.path.join(nc_folder, "*.nc")
         dataset_era5 = GeoClim.read_netcdf_era5(file_pattern)
 
-        if var_name not in dataset_era5.data_vars:
-            raise KeyError(f"Variable '{var_name}' not found in the NetCDF files. Available variables: {list(dataset_era5.data_vars.keys())}")
+        # Convert to list if it's a single string
+        if isinstance(var_names, str):
+            var_names = [var_names]
 
-        data_var = dataset_era5[var_name]
+        missing_vars = [v for v in var_names if v not in dataset_era5.data_vars]
+        if missing_vars:
+            raise KeyError(f"Variables {missing_vars} not found. Available: {list(dataset_era5.data_vars.keys())}")
         
-        # Check coordinate names (ERA5 uses latitude/longitude, others might use lat/lon)
+        # Check coordinate names
         lat_col = "latitude" if "latitude" in dataset_era5.coords else "lat"
         lon_col = "longitude" if "longitude" in dataset_era5.coords else "lon"
         time_col = "valid_time" if "valid_time" in dataset_era5.coords else "time"
@@ -255,13 +259,16 @@ class GeoClim:
         lons = dataset_era5[lon_col].values
 
         times = pd.to_datetime(dataset_era5[time_col].values)
-        data_var = data_var.assign_coords({time_col: times})
-        data_var.coords["year"] = (time_col, data_var[time_col].dt.year.data)
-        data_var.coords["month"] = (time_col, data_var[time_col].dt.month.data)
+        dataset_era5 = dataset_era5.assign_coords({time_col: times})
+        dataset_era5.coords["year"] = (time_col, dataset_era5[time_col].dt.year.data)
+        dataset_era5.coords["month"] = (time_col, dataset_era5[time_col].dt.month.data)
 
-        # Assuming aggregation by sum (e.g., total precipitation). 
-        # If mean is needed (e.g., temperature), you could add an agg_method parameter.
-        data_monthly = data_var.groupby(["year", "month"]).sum(dim=time_col)
+        # Apply aggregation
+        dataset_subset = dataset_era5[var_names]
+        if agg_method.lower() == "sum":
+            data_monthly = dataset_subset.groupby(["year", "month"]).sum(dim=time_col)
+        else:
+            data_monthly = dataset_subset.groupby(["year", "month"]).mean(dim=time_col)
         
         results = []
         for i in range(data_monthly["year"].size):
@@ -270,14 +277,16 @@ class GeoClim:
                     data_sel = data_monthly.isel(year=i, month=j)
                     year_val = int(data_sel["year"].values)
                     month_val = int(data_sel["month"].values)
-                    data_vals = data_sel.values
-
-                    interpolated_vals = GeoClim.interpolate_points(lons, lats, data_vals, target_points)
 
                     df_out = df_points.copy()
-                    df_out[f"{var_name}_interpolated"] = interpolated_vals * multiplier 
                     df_out["year"] = year_val
                     df_out["month"] = month_val
+
+                    # Interpolate each variable
+                    for v_name in var_names:
+                        data_vals = data_sel[v_name].values
+                        interpolated_vals = GeoClim.interpolate_points(lons, lats, data_vals, target_points)
+                        df_out[f"{v_name}_interpolated"] = interpolated_vals * multiplier 
                     
                     results.append(df_out)
                 except Exception:
