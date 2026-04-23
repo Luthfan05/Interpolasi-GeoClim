@@ -227,10 +227,11 @@ class GeoClim:
         return df_points, np.array([lats, lons]).T
 
     @staticmethod
-    def interpolate_era5_nc(coord_file, nc_folder, col_lat="Y", col_lon="X"):
+    def interpolate_era5_nc(coord_file, nc_folder, col_lat="Y", col_lon="X", var_name="tp", multiplier=1000):
         """
         Automated pipeline for bilinear interpolation of ERA5 (.nc) data
         directly from raw coordinate files and a folder of .nc files.
+        Allows specifying the target variable (var_name) and an optional multiplier.
         """
         import os
         from glob import glob
@@ -240,30 +241,41 @@ class GeoClim:
         file_pattern = os.path.join(nc_folder, "*.nc")
         dataset_era5 = GeoClim.read_netcdf_era5(file_pattern)
 
-        tp = dataset_era5["tp"]
-        lats = dataset_era5["latitude"].values
-        lons = dataset_era5["longitude"].values
+        if var_name not in dataset_era5.data_vars:
+            raise KeyError(f"Variable '{var_name}' not found in the NetCDF files. Available variables: {list(dataset_era5.data_vars.keys())}")
 
-        times = pd.to_datetime(dataset_era5["valid_time"].values)
-        tp = tp.assign_coords(valid_time=times)
-        tp.coords["year"] = ("valid_time", tp["valid_time"].dt.year.data)
-        tp.coords["month"] = ("valid_time", tp["valid_time"].dt.month.data)
+        data_var = dataset_era5[var_name]
+        
+        # Check coordinate names (ERA5 uses latitude/longitude, others might use lat/lon)
+        lat_col = "latitude" if "latitude" in dataset_era5.coords else "lat"
+        lon_col = "longitude" if "longitude" in dataset_era5.coords else "lon"
+        time_col = "valid_time" if "valid_time" in dataset_era5.coords else "time"
+        
+        lats = dataset_era5[lat_col].values
+        lons = dataset_era5[lon_col].values
 
-        tp_monthly = tp.groupby(["year", "month"]).sum(dim="valid_time")
+        times = pd.to_datetime(dataset_era5[time_col].values)
+        data_var = data_var.assign_coords({time_col: times})
+        data_var.coords["year"] = (time_col, data_var[time_col].dt.year.data)
+        data_var.coords["month"] = (time_col, data_var[time_col].dt.month.data)
+
+        # Assuming aggregation by sum (e.g., total precipitation). 
+        # If mean is needed (e.g., temperature), you could add an agg_method parameter.
+        data_monthly = data_var.groupby(["year", "month"]).sum(dim=time_col)
         
         results = []
-        for i in range(tp_monthly["year"].size):
-            for j in range(tp_monthly["month"].size):
+        for i in range(data_monthly["year"].size):
+            for j in range(data_monthly["month"].size):
                 try:
-                    tp_sel = tp_monthly.isel(year=i, month=j)
-                    year_val = int(tp_sel["year"].values)
-                    month_val = int(tp_sel["month"].values)
-                    tp_vals = tp_sel.values
+                    data_sel = data_monthly.isel(year=i, month=j)
+                    year_val = int(data_sel["year"].values)
+                    month_val = int(data_sel["month"].values)
+                    data_vals = data_sel.values
 
-                    interpolated_vals = GeoClim.interpolate_points(lons, lats, tp_vals, target_points)
+                    interpolated_vals = GeoClim.interpolate_points(lons, lats, data_vals, target_points)
 
                     df_out = df_points.copy()
-                    df_out["tp_interpolated_mm"] = interpolated_vals * 1000 # Meter to mm
+                    df_out[f"{var_name}_interpolated"] = interpolated_vals * multiplier 
                     df_out["year"] = year_val
                     df_out["month"] = month_val
                     
