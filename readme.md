@@ -44,27 +44,27 @@ You don't need to write hundreds of lines of complex looping or matrix logic. Pr
 Automatically merges all monthly `.nc` files, interpolates, and converts to Millimeters.
 ```python
 from geoclim import GeoClim
-from logger import log_sukses
+from logger import log_success
 
-result = GeoClim.interpolasi_era5_nc(
+result = GeoClim.interpolate_era5_nc(
     file_koordinat='coordinates.xlsx',
     folder_nc='Data_ERA5',
     col_lat='Y', # Adjust to your excel latitude column
     col_lon='X'  # Adjust to your excel longitude column
 )
-GeoClim.simpan_ke_csv(result, 'Output_ERA5.csv')
-log_sukses("ERA5 data processed successfully!")
+GeoClim.save_to_csv(result, 'Output_ERA5.csv')
+log_success("ERA5 data processed successfully!")
 ```
 
 ### 2. Processing GPM IMERG (`.HDF5`)
 ```python
 from geoclim import GeoClim
 
-result = GeoClim.interpolasi_imerg_hdf5(
+result = GeoClim.interpolate_imerg_hdf5(
     file_koordinat='coordinates.xlsx',
     folder_hdf5='Data_IMERG'
 )
-GeoClim.simpan_ke_csv(result, 'Output_IMERG.csv')
+GeoClim.save_to_csv(result, 'Output_IMERG.csv')
 ```
 
 ### 3. Processing GSMaP (`.dat.gz`)
@@ -72,11 +72,11 @@ Automatically calculates total monthly precipitation based on `rain_rate` x `val
 ```python
 from geoclim import GeoClim
 
-result = GeoClim.interpolasi_gsmap_dat_gz(
+result = GeoClim.interpolate_gsmap_dat_gz(
     file_koordinat='coordinates.xlsx',
     folder_dat_gz='Data_GSMaP'
 )
-GeoClim.simpan_ke_csv(result, 'Output_GSMaP.csv')
+GeoClim.save_to_csv(result, 'Output_GSMaP.csv')
 ```
 
 ### 4. Processing CHIRPS (`.tar.gz`)
@@ -84,7 +84,7 @@ Unpacks the raster `.bil` data into a temporary folder, interpolates it, and aut
 ```python
 from geoclim import GeoClim
 
-result = GeoClim.interpolasi_chirps_tar_gz(
+result = GeoClim.interpolate_chirps_tar_gz(
     file_koordinat='coordinates.xlsx',
     folder_tar_gz='Data_CHIRPS',
     extract_folder='Temp_Extract'

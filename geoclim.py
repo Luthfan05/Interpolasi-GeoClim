@@ -10,33 +10,33 @@ import re
 
 class GeoClim:
     """
-    Library khusus untuk membaca dan memproses berbagai jenis 
-    format file data iklim/spasial.
+    A specialized library for reading, processing, and interpolating 
+    various spatial and climate data file formats.
     """
 
     @staticmethod
-    def baca_excel(filepath):
-        """Membaca file .xlsx (misal: daftar koordinat stasiun)."""
+    def read_excel(filepath):
+        """Reads .xlsx files (e.g., target station coordinates)."""
         if not os.path.exists(filepath):
-            raise FileNotFoundError(f"File excel tidak ditemukan: {filepath}")
+            raise FileNotFoundError(f"Excel file not found: {filepath}")
         return pd.read_excel(filepath)
 
     @staticmethod
-    def baca_csv(filepath):
-        """Membaca file .csv biasa."""
+    def read_csv(filepath):
+        """Reads standard .csv files."""
         if not os.path.exists(filepath):
-            raise FileNotFoundError(f"File CSV tidak ditemukan: {filepath}")
+            raise FileNotFoundError(f"CSV file not found: {filepath}")
         return pd.read_csv(filepath)
 
     @staticmethod
-    def baca_raster_bil(filepath):
+    def read_raster_bil(filepath):
         """
-        Membaca format raster .bil (contoh: CHIRPS).
-        Mengembalikan array longitude, latitude, dan matrix data raster.
+        Reads .bil raster format (e.g., CHIRPS).
+        Returns arrays of longitudes, latitudes, and the raster data matrix.
         """
         with rasterio.open(filepath) as dataset:
             data = dataset.read(1)
-            # Menangani NoData (biasanya -9999, diset ke NaN agar aman dihitung)
+            # Handle NoData (usually -9999, set to NaN for safe computation)
             if dataset.nodata is not None:
                 data = np.where(data == dataset.nodata, np.nan, data)
                 
@@ -49,89 +49,88 @@ class GeoClim:
             return lons, lats, data
 
     @staticmethod
-    def ekstrak_tar_gz(tar_path, extract_folder, ekstensi_target=None):
+    def extract_tar_gz(tar_path, extract_folder, target_extensions=None):
         """
-        Mengekstrak file .tar.gz, dengan opsi filter ekstensi tertentu.
-        Mengembalikan daftar nama file yang berhasil diekstrak.
+        Extracts .tar.gz files, with an option to filter by specific extensions.
+        Returns a list of extracted file paths.
         """
         extracted_files = []
         with tarfile.open(tar_path, "r:gz") as tar:
             for member in tar.getmembers():
-                if ekstensi_target is None or any(member.name.endswith(ext) for ext in ekstensi_target):
-                    member.name = os.path.basename(member.name) # Bersihkan path
+                if target_extensions is None or any(member.name.endswith(ext) for ext in target_extensions):
+                    member.name = os.path.basename(member.name) # Clean path
                     tar.extract(member, path=extract_folder)
                     extracted_files.append(os.path.join(extract_folder, member.name))
         return extracted_files
 
     @staticmethod
-    def baca_hdf5_imerg(filepath):
+    def read_hdf5_imerg(filepath):
         """
-        Membaca data format .HDF5 khusus untuk struktur GPM IMERG.
-        Mengembalikan array longitude, latitude, dan matrix presipitasi.
+        Reads .HDF5 format specifically structured for GPM IMERG data.
+        Returns arrays of longitudes, latitudes, and the precipitation matrix.
         """
         with h5py.File(filepath, 'r') as f:
             precip = f["Grid"]["precipitation"][0, :, :]
-            lat = f["Grid"]["lat"][:]
-            lon = f["Grid"]["lon"][:]
-        return lon, lat, precip
+            lats = f["Grid"]["lat"][:]
+            lons = f["Grid"]["lon"][:]
+        return lons, lats, precip
 
     @staticmethod
-    def baca_binary_gz_gsmap(filepath):
+    def read_binary_gz_gsmap(filepath):
         """
-        Membaca data binary float32 (.dat.gz) khusus struktur data GSMaP.
-        Mengembalikan matrix data rain_rate dan valid_pixel_count.
+        Reads binary float32 (.dat.gz) structured for GSMaP data.
+        Returns matrices for rain_rate and valid_pixel_count.
         """
         with gzip.open(filepath, "rb") as f:
             data = np.frombuffer(f.read(), dtype='<f4')
         
-        # Struktur dimensi GSMaP (1200 lat x 3600 lon = 4320000 pixel)
+        # GSMaP dimension structure (1200 lat x 3600 lon = 4320000 pixels)
         rain_rate = data[:4320000].copy()
         valid_pixel_count = data[4320000:] if len(data) > 4320000 else None
         
         # Missing values (NaN)
         rain_rate[rain_rate == -999.9] = np.nan
         
-        lat = np.linspace(59.95, -59.95, 1200)
-        lon = np.linspace(-179.95, 179.95, 3600)
+        lats = np.linspace(59.95, -59.95, 1200)
+        lons = np.linspace(-179.95, 179.95, 3600)
         
-        return lon, lat, rain_rate, valid_pixel_count
+        return lons, lats, rain_rate, valid_pixel_count
 
     @staticmethod
-    def baca_netcdf_era5(file_pattern):
+    def read_netcdf_era5(file_pattern):
         """
-        Membaca satu atau banyak file NetCDF (.nc) sekaligus menggunakan xarray.
-        Contoh input pattern: 'path/to/folder/*.nc'
+        Reads one or multiple NetCDF (.nc) files using xarray.
+        Example pattern: 'path/to/folder/*.nc'
         """
         ds = xr.open_mfdataset(file_pattern, combine="by_coords")
         return ds
 
     @staticmethod
-    def simpan_ke_csv(df, output_path):
-        """Utility function untuk menyimpan DataFrame ke CSV."""
+    def save_to_csv(df, output_path):
+        """Utility function to save DataFrame to CSV."""
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         df.to_csv(output_path, index=False)
 
     @staticmethod
-    def interpolasi_titik(lons, lats, grid_data, titik_target, fallback_nearest=True):
+    def interpolate_points(lons, lats, grid_data, target_points, fallback_nearest=True):
         """
-        Mengekstrak data dari grid spasial ke titik-titik tertentu menggunakan interpolasi Bilinear.
-        Jika ada titik yang menghasilkan NaN (misal di tepi batas), otomatis menggunakan nearest neighbor fallback.
+        Extracts data from a spatial grid to specific target points using Bilinear Interpolation.
+        If any point yields NaN (e.g., at boundaries), automatically falls back to nearest neighbor.
 
-        Parameter:
-        - lons: Array 1D dari Longitude (urutan harus menaik atau menurun secara berurutan)
-        - lats: Array 1D dari Latitude (urutan harus menaik atau menurun secara berurutan)
-        - grid_data: Array 2D data (misalnya curah hujan) dengan shape (len(lats), len(lons))
-        - titik_target: Array 2D numpy dengan shape (N, 2), berisi [[lat1, lon1], [lat2, lon2], ...]
-        - fallback_nearest: Boolean, jika True akan mencari nilai terdekat untuk piksel yang NaN.
+        Parameters:
+        - lons: 1D array of Longitudes (must be strictly ascending or descending)
+        - lats: 1D array of Latitudes (must be strictly ascending or descending)
+        - grid_data: 2D data array (e.g., rainfall) with shape (len(lats), len(lons))
+        - target_points: 2D numpy array with shape (N, 2), containing [[lat1, lon1], [lat2, lon2], ...]
+        - fallback_nearest: Boolean, if True finds the nearest valid value for NaN pixels.
         
-        Mengembalikan:
-        - Array 1D berisi nilai hasil interpolasi untuk setiap titik.
+        Returns:
+        - 1D array of interpolated values for each target point.
         """
         from scipy.interpolate import RegularGridInterpolator
         from scipy.spatial.distance import cdist
 
-        # RegularGridInterpolator membutuhkan sumbu yang urut naik (strictly ascending). 
-        # Jika lats atau lons menurun (descending), kita balik array-nya.
+        # RegularGridInterpolator requires strictly ascending axes.
         if lats[0] > lats[-1]:
             lats = lats[::-1]
             grid_data = grid_data[::-1, :]
@@ -139,47 +138,45 @@ class GeoClim:
             lons = lons[::-1]
             grid_data = grid_data[:, ::-1]
 
-        # Inisialisasi Bilinear Interpolator
+        # Initialize Bilinear Interpolator
         interpolator = RegularGridInterpolator((lats, lons), grid_data, bounds_error=False, fill_value=np.nan)
         
-        # Eksekusi interpolasi. Hati-hati titik_target harus berformat (lat, lon)
-        interpolated = interpolator(titik_target)
+        # Execute interpolation. Target points must be formatted as (lat, lon)
+        interpolated = interpolator(target_points)
 
-        # Fallback ke Nearest Neighbor jika ada nilai yang masih NaN setelah interpolasi
+        # Fallback to Nearest Neighbor if there are NaNs after interpolation
         if fallback_nearest and np.isnan(interpolated).any():
             nan_mask = np.isnan(interpolated)
             valid_mask = ~np.isnan(grid_data)
             
-            # Membentuk titik grid dari mask yang valid
+            # Form grid points from valid mask
             lat_grid, lon_grid = np.meshgrid(lats, lons, indexing='ij')
             valid_points = np.array([lat_grid[valid_mask], lon_grid[valid_mask]]).T
             valid_values = grid_data[valid_mask]
 
             if len(valid_points) > 0:
-                # Menggunakan cdist untuk mencari titik valid dengan jarak terdekat (Nearest Neighbor)
-                nearest_idx = np.argmin(cdist(titik_target[nan_mask], valid_points), axis=1)
+                nearest_idx = np.argmin(cdist(target_points[nan_mask], valid_points), axis=1)
                 interpolated[nan_mask] = valid_values[nearest_idx]
 
         return interpolated
 
     @staticmethod
-    def ekstrak_tanggal_fleksibel(nama_file):
+    def extract_flexible_date(filename):
         """
-        Mengekstrak tanggal dari sebuah string/nama file dengan pola seperti:
+        Extracts a date from a filename string using patterns like:
         YYYYMM, YYYY.MM, YYYY-MM, YYYY_MM.
-        Cocok digunakan pada dataset tipe CHIRPS.
+        Suitable for CHIRPS dataset.
         """
-        match = re.search(r"\d{4}[\._-]?\d{2}", nama_file)
+        match = re.search(r"\d{4}[\._-]?\d{2}", filename)
         if match:
             return match.group(0).replace("_", "-").replace(".", "-")
         return "unknown"
 
     @staticmethod
-    def filter_batas_koordinat(df, col_lat="lat", col_lon="lon", lat_min=-12.0, lat_max=6.0, lon_min=95.0, lon_max=141.0):
+    def filter_bounding_box(df, col_lat="lat", col_lon="lon", lat_min=-12.0, lat_max=6.0, lon_min=95.0, lon_max=141.0):
         """
-        Melakukan filter batas wilayah/koordinat spasial (Bounding Box) pada DataFrame.
-        Berguna untuk memotong data spasial global (seperti GSMaP atau CHIRPS asli) 
-        hanya untuk cakupan wilayah Indonesia.
+        Filters spatial coordinates based on a Bounding Box.
+        Useful for clipping global spatial data (e.g., GSMaP or CHIRPS) to specific regions.
         """
         return df[
             (df[col_lat] >= lat_min) & (df[col_lat] <= lat_max) &
@@ -187,156 +184,127 @@ class GeoClim:
         ].copy()
 
     @staticmethod
-    def format_grid_2d_ke_dataframe(lons, lats, data_array, nama_kolom="ch"):
+    def format_grid_2d_to_dataframe(lons, lats, data_array, col_name="ch"):
         """
-        Mengubah array Lons (1D), Lats (1D), dan Data Grid (2D) menjadi format tabular (DataFrame Pandas)
-        dengan kolom: lat, lon, dan nilai. Biasanya dipakai untuk mengekspor ke file CSV.
+        Converts 1D Lons, 1D Lats, and 2D Data Grid into a tabular DataFrame format
+        with columns: lat, lon, and value. Typically used before exporting to CSV.
         """
         lon_grid, lat_grid = np.meshgrid(lons, lats)
         df = pd.DataFrame({
             "lon": lon_grid.flatten(),
             "lat": lat_grid.flatten(),
-            nama_kolom: data_array.flatten()
+            col_name: data_array.flatten()
         })
         return df
 
     @staticmethod
-    def pivot_dataframe_ke_grid_2d(df, col_lat="lat", col_lon="lon", col_nilai="ch"):
+    def pivot_dataframe_to_grid_2d(df, col_lat="lat", col_lon="lon", col_value="ch"):
         """
-        Membentuk kembali DataFrame yang berbentuk tabular ke format Grid 2D Array
-        dan mengembalikan Lons 1D, Lats 1D, serta Data Matrix 2D-nya.
-        Sangat krusial untuk persiapan sebelum melakukan `interpolasi_titik`.
+        Reconstructs a tabular DataFrame back into a 2D Grid Array.
+        Returns 1D Lons, 1D Lats, and 2D Data Matrix.
+        Crucial preparation step before running `interpolate_points`.
         """
-        # Hati-hati dengan urutan
-        lats_unik = np.sort(df[col_lat].unique())
-        lons_unik = np.sort(df[col_lon].unique())
+        unique_lats = np.sort(df[col_lat].unique())
+        unique_lons = np.sort(df[col_lon].unique())
         
-        # Buat pivot
-        grid_data = df.pivot(index=col_lat, columns=col_lon, values=col_nilai).values
+        grid_data = df.pivot(index=col_lat, columns=col_lon, values=col_value).values
         
-        return lons_unik, lats_unik, grid_data
+        return unique_lons, unique_lats, grid_data
+
+    # =========================================================================
+    # HIGH-LEVEL AUTOMATED PIPELINE FUNCTIONS
+    # =========================================================================
 
     @staticmethod
-    def interpolasi_era5_nc(file_koordinat, folder_nc, col_lat="Y", col_lon="X"):
+    def _read_target_points(coord_file, col_lat, col_lon):
+        """Internal helper to read target coordinates into an array."""
+        if coord_file.endswith('.xlsx'):
+            df_points = GeoClim.read_excel(coord_file)
+        else:
+            df_points = GeoClim.read_csv(coord_file)
+        lats = df_points[col_lat].values
+        lons = df_points[col_lon].values
+        return df_points, np.array([lats, lons]).T
+
+    @staticmethod
+    def interpolate_era5_nc(coord_file, nc_folder, col_lat="Y", col_lon="X"):
         """
-        Fungsi Otomatis (High-Level) untuk melakukan interpolasi bilinear data ERA5 (.nc)
-        secara langsung dari file koordinat mentah dan folder kumpulan file .nc.
-        
-        Parameter:
-        - file_koordinat: Path menuju file .xlsx atau .csv berisi koordinat stasiun target.
-        - folder_nc: Path menuju folder tempat file-file .nc ERA5 tersimpan.
-        - col_lat: Nama kolom latitude di file koordinat.
-        - col_lon: Nama kolom longitude di file koordinat.
-        
-        Mengembalikan:
-        - DataFrame Pandas lengkap berisi hasil interpolasi bulanan seluruh stasiun.
+        Automated pipeline for bilinear interpolation of ERA5 (.nc) data
+        directly from raw coordinate files and a folder of .nc files.
         """
+        import os
         from glob import glob
         
-        # 1. Baca Otomatis File Titik (Excel atau CSV)
-        if file_koordinat.endswith('.xlsx'):
-            df_titik = GeoClim.baca_excel(file_koordinat)
-        else:
-            df_titik = GeoClim.baca_csv(file_koordinat)
-            
-        lats_target = df_titik[col_lat].values
-        lons_target = df_titik[col_lon].values
-        titik_target = np.array([lats_target, lons_target]).T
+        df_points, target_points = GeoClim._read_target_points(coord_file, col_lat, col_lon)
 
-        # 2. Baca seluruh data NC di folder
-        file_pattern = os.path.join(folder_nc, "*.nc")
-        dataset_era5 = GeoClim.baca_netcdf_era5(file_pattern)
+        file_pattern = os.path.join(nc_folder, "*.nc")
+        dataset_era5 = GeoClim.read_netcdf_era5(file_pattern)
 
         tp = dataset_era5["tp"]
         lats = dataset_era5["latitude"].values
         lons = dataset_era5["longitude"].values
 
-        # 3. Proses Group Bulanan sesuai algoritma aslinya
         times = pd.to_datetime(dataset_era5["valid_time"].values)
         tp = tp.assign_coords(valid_time=times)
         tp.coords["year"] = ("valid_time", tp["valid_time"].dt.year.data)
         tp.coords["month"] = ("valid_time", tp["valid_time"].dt.month.data)
 
-        tp_bulanan = tp.groupby(["year", "month"]).sum(dim="valid_time")
+        tp_monthly = tp.groupby(["year", "month"]).sum(dim="valid_time")
         
         results = []
-        
-        # 4. Looping untuk interpolasi setiap bulannya
-        for i in range(tp_bulanan["year"].size):
-            for j in range(tp_bulanan["month"].size):
+        for i in range(tp_monthly["year"].size):
+            for j in range(tp_monthly["month"].size):
                 try:
-                    tp_sel = tp_bulanan.isel(year=i, month=j)
+                    tp_sel = tp_monthly.isel(year=i, month=j)
                     year_val = int(tp_sel["year"].values)
                     month_val = int(tp_sel["month"].values)
                     tp_vals = tp_sel.values
 
-                    # Otomatis panggil helper Bilinear
-                    hasil_interpolasi = GeoClim.interpolasi_titik(lons, lats, tp_vals, titik_target)
+                    interpolated_vals = GeoClim.interpolate_points(lons, lats, tp_vals, target_points)
 
-                    # Bentuk output
-                    df_out = df_titik.copy()
-                    df_out["tp_interpolated_mm"] = hasil_interpolasi * 1000 # Meter ke mm
-                    df_out["tahun"] = year_val
-                    df_out["bulan"] = month_val
+                    df_out = df_points.copy()
+                    df_out["tp_interpolated_mm"] = interpolated_vals * 1000 # Meter to mm
+                    df_out["year"] = year_val
+                    df_out["month"] = month_val
                     
                     results.append(df_out)
                 except Exception:
                     continue
 
-        df_final = pd.concat(results, ignore_index=True)
-        return df_final
-
-    # =========================================================================
-    # FUNGSI HIGH-LEVEL LAINNYA UNTUK SEKALI JALAN
-    # =========================================================================
+        if results:
+            return pd.concat(results, ignore_index=True)
+        return pd.DataFrame()
 
     @staticmethod
-    def _baca_titik_target(file_koordinat, col_lat, col_lon):
-        """Helper internal untuk membaca koordinat target menjadi bentuk array."""
-        if file_koordinat.endswith('.xlsx'):
-            df_titik = GeoClim.baca_excel(file_koordinat)
-        else:
-            df_titik = GeoClim.baca_csv(file_koordinat)
-        lats = df_titik[col_lat].values
-        lons = df_titik[col_lon].values
-        return df_titik, np.array([lats, lons]).T
-
-    @staticmethod
-    def interpolasi_chirps_tar_gz(file_koordinat, folder_tar_gz, extract_folder, col_lat="Y", col_lon="X"):
-        """Fungsi High-Level otomatis proses CHIRPS dari tar.gz mentah ke hasil interpolasi csv."""
+    def interpolate_chirps_tar_gz(coord_file, tar_gz_folder, extract_folder, col_lat="Y", col_lon="X"):
+        """Automated pipeline to process CHIRPS from raw tar.gz to interpolated CSV results."""
         from glob import glob
         import shutil
         
-        df_titik, titik_target = GeoClim._baca_titik_target(file_koordinat, col_lat, col_lon)
+        df_points, target_points = GeoClim._read_target_points(coord_file, col_lat, col_lon)
         os.makedirs(extract_folder, exist_ok=True)
         
-        tar_files = glob(os.path.join(folder_tar_gz, "*.tar.gz"))
+        tar_files = glob(os.path.join(tar_gz_folder, "*.tar.gz"))
         results = []
         
         for tar_path in tar_files:
             try:
-                # 1. Ekstrak
-                files_extracted = GeoClim.ekstrak_tar_gz(tar_path, extract_folder, [".bil", ".hdr"])
+                files_extracted = GeoClim.extract_tar_gz(tar_path, extract_folder, [".bil", ".hdr"])
                 
-                # 2. Proses tiap .bil
                 for file_bil in files_extracted:
                     if not file_bil.endswith(".bil"):
                         continue
                     
-                    lons, lats, data_raster = GeoClim.baca_raster_bil(file_bil)
+                    lons, lats, data_raster = GeoClim.read_raster_bil(file_bil)
+                    interpolated_vals = GeoClim.interpolate_points(lons, lats, data_raster, target_points)
                     
-                    # 3. Interpolasi
-                    hasil_interpolasi = GeoClim.interpolasi_titik(lons, lats, data_raster, titik_target)
+                    date_str = GeoClim.extract_flexible_date(os.path.basename(file_bil))
                     
-                    # Ekstrak waktu dan gabung output
-                    tgl_str = GeoClim.ekstrak_tanggal_fleksibel(os.path.basename(file_bil))
-                    
-                    df_out = df_titik.copy()
-                    df_out["ch_interpolated"] = hasil_interpolasi
-                    df_out["tanggal"] = tgl_str
+                    df_out = df_points.copy()
+                    df_out["ch_interpolated"] = interpolated_vals
+                    df_out["date"] = date_str
                     results.append(df_out)
                     
-                    # Bersihkan file ekstrak sementara
                     os.remove(file_bil)
                     hdr_path = file_bil.replace(".bil", ".hdr")
                     if os.path.exists(hdr_path):
@@ -344,26 +312,24 @@ class GeoClim:
             except Exception:
                 continue
                 
-        if len(results) > 0:
+        if results:
             return pd.concat(results, ignore_index=True)
         return pd.DataFrame()
 
     @staticmethod
-    def interpolasi_imerg_hdf5(file_koordinat, folder_hdf5, col_lat="Y", col_lon="X"):
-        """Fungsi High-Level otomatis proses kumpulan file IMERG .HDF5 ke hasil interpolasi."""
+    def interpolate_imerg_hdf5(coord_file, hdf5_folder, col_lat="Y", col_lon="X"):
+        """Automated pipeline to process IMERG .HDF5 files to interpolated results."""
         from glob import glob
-        from datetime import datetime
         
-        df_titik, titik_target = GeoClim._baca_titik_target(file_koordinat, col_lat, col_lon)
-        hdf5_files = glob(os.path.join(folder_hdf5, "**", "*.HDF5"), recursive=True)
+        df_points, target_points = GeoClim._read_target_points(coord_file, col_lat, col_lon)
+        hdf5_files = glob(os.path.join(hdf5_folder, "**", "*.HDF5"), recursive=True)
         
         results = []
         for file_path in hdf5_files:
             try:
-                lons, lats, precip = GeoClim.baca_hdf5_imerg(file_path)
-                hasil_interpolasi = GeoClim.interpolasi_titik(lons, lats, precip, titik_target)
+                lons, lats, precip = GeoClim.read_hdf5_imerg(file_path)
+                interpolated_vals = GeoClim.interpolate_points(lons, lats, precip, target_points)
                 
-                # Ekstrak tanggal dari nama file
                 filename = os.path.basename(file_path)
                 try:
                     date_str = filename.split('.')[4].split('-')[0]
@@ -371,48 +337,45 @@ class GeoClim:
                 except Exception:
                     date_val = None
                     
-                df_out = df_titik.copy()
-                df_out["precip_interpolated"] = hasil_interpolasi
-                df_out["tanggal"] = date_val
+                df_out = df_points.copy()
+                df_out["precip_interpolated"] = interpolated_vals
+                df_out["date"] = date_val
                 results.append(df_out)
             except Exception:
                 continue
                 
-        if len(results) > 0:
+        if results:
             return pd.concat(results, ignore_index=True)
         return pd.DataFrame()
 
     @staticmethod
-    def interpolasi_gsmap_dat_gz(file_koordinat, folder_dat_gz, col_lat="Y", col_lon="X"):
-        """Fungsi High-Level otomatis proses file GSMaP binary gz ke hasil interpolasi."""
+    def interpolate_gsmap_dat_gz(coord_file, dat_gz_folder, col_lat="Y", col_lon="X"):
+        """Automated pipeline to process GSMaP binary gz files to interpolated results."""
         from glob import glob
         
-        df_titik, titik_target = GeoClim._baca_titik_target(file_koordinat, col_lat, col_lon)
-        gz_files = glob(os.path.join(folder_dat_gz, "**", "*.dat.gz"), recursive=True)
+        df_points, target_points = GeoClim._read_target_points(coord_file, col_lat, col_lon)
+        gz_files = glob(os.path.join(dat_gz_folder, "**", "*.dat.gz"), recursive=True)
         
         results = []
         for file_path in gz_files:
             try:
-                lons, lats, rain_rate, valid_pixel = GeoClim.baca_binary_gz_gsmap(file_path)
+                lons, lats, rain_rate, valid_pixel = GeoClim.read_binary_gz_gsmap(file_path)
                 
-                # Kalkulasi total hujan bulanan
                 total_rain = rain_rate * valid_pixel
                 
-                # Ekstrak tahun bulan dari nama file (misal: gsmap_gauge.201403.0.1d.daily.00Z-23Z...)
                 basename = os.path.basename(file_path)
                 yyyymm = basename.split('.')[1] 
                 date_val = pd.to_datetime(yyyymm, format="%Y%m")
                 
-                hasil_interpolasi = GeoClim.interpolasi_titik(lons, lats, total_rain, titik_target)
+                interpolated_vals = GeoClim.interpolate_points(lons, lats, total_rain, target_points)
                 
-                df_out = df_titik.copy()
-                df_out["rain_interpolated"] = hasil_interpolasi
-                df_out["tanggal"] = date_val
+                df_out = df_points.copy()
+                df_out["rain_interpolated"] = interpolated_vals
+                df_out["date"] = date_val
                 results.append(df_out)
             except Exception:
                 continue
                 
-        if len(results) > 0:
+        if results:
             return pd.concat(results, ignore_index=True)
         return pd.DataFrame()
-
