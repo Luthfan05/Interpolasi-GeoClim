@@ -34,6 +34,13 @@ Alternatively, just install the dependencies using `requirements.txt`:
 pip install -r requirements.txt
 ```
 
+### Google Colab Installation
+If you are working on Google Colab, you can install GeoClim directly from GitHub by creating a new code cell and running:
+
+```python
+!pip install git+https://github.com/Luthfan05/Interpolasi-GeoClim.git
+```
+
 ---
 
 ## 📖 Quick Start (High-Level API)
@@ -47,8 +54,8 @@ from geoclim import GeoClim
 from logger import log_success
 
 result = GeoClim.interpolate_era5_nc(
-    file_koordinat='coordinates.xlsx',
-    folder_nc='Data_ERA5',
+    coord_file='coordinates.xlsx',
+    nc_folder='Data_ERA5',
     col_lat='Y', # Adjust to your excel latitude column
     col_lon='X'  # Adjust to your excel longitude column
 )
@@ -61,8 +68,8 @@ log_success("ERA5 data processed successfully!")
 from geoclim import GeoClim
 
 result = GeoClim.interpolate_imerg_hdf5(
-    file_koordinat='coordinates.xlsx',
-    folder_hdf5='Data_IMERG'
+    coord_file='coordinates.xlsx',
+    hdf5_folder='Data_IMERG'
 )
 GeoClim.save_to_csv(result, 'Output_IMERG.csv')
 ```
@@ -73,8 +80,8 @@ Automatically calculates total monthly precipitation based on `rain_rate` x `val
 from geoclim import GeoClim
 
 result = GeoClim.interpolate_gsmap_dat_gz(
-    file_koordinat='coordinates.xlsx',
-    folder_dat_gz='Data_GSMaP'
+    coord_file='coordinates.xlsx',
+    dat_gz_folder='Data_GSMaP'
 )
 GeoClim.save_to_csv(result, 'Output_GSMaP.csv')
 ```
@@ -85,8 +92,8 @@ Unpacks the raster `.bil` data into a temporary folder, interpolates it, and aut
 from geoclim import GeoClim
 
 result = GeoClim.interpolate_chirps_tar_gz(
-    file_koordinat='coordinates.xlsx',
-    folder_tar_gz='Data_CHIRPS',
+    coord_file='coordinates.xlsx',
+    tar_gz_folder='Data_CHIRPS',
     extract_folder='Temp_Extract'
 )
 GeoClim.simpan_ke_csv(result, 'Output_CHIRPS.csv')
